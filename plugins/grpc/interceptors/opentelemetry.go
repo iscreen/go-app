@@ -36,7 +36,7 @@ func (i OtelInterceptor) Handler() grpc.UnaryServerInterceptor {
 		callerSpanCtx := trace.SpanContextFromContext(ctx)
 
 		startOpts := []trace.SpanStartOption{trace.WithNewRoot()}
-		if callerSpanCtx.IsValid() && callerSpanCtx.IsRemote() {
+		if callerSpanCtx.IsValid() {
 			startOpts = append(startOpts, trace.WithLinks(trace.Link{
 				SpanContext: callerSpanCtx,
 			}))
