@@ -12,6 +12,7 @@ import (
 	"github.com/shoplineapp/go-app/plugins/grpc/interceptors"
 	"github.com/shoplineapp/go-app/plugins/logger"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel/propagation"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -55,7 +56,9 @@ func NewDefaultGrpcServerWithSentry(
 	}
 
 	grpc_plugin.SetGlobalServerOptions(
-		grpc.StatsHandler(otelgrpc.NewServerHandler()),
+		grpc.StatsHandler(otelgrpc.NewServerHandler(
+			otelgrpc.WithPropagators(propagation.NewCompositeTextMapPropagator()),
+		)),
 	)
 	plugin.Configure(
 		grpc.ChainUnaryInterceptor(
