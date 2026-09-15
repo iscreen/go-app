@@ -45,10 +45,11 @@ func (i OtelInterceptor) Handler() grpc.UnaryServerInterceptor {
 
 		newCtx, span := tracer.Start(ctx, info.FullMethod, startOpts...)
 
-		if callerSpan.IsRecording() && span.SpanContext().IsValid() {
-			callerSpan.AddLink(trace.Link{
-				SpanContext: span.SpanContext(),
-			})
+		if callerSpanCtx.IsValid() {
+			span.SetAttributes(
+				attribute.String("caller.trace_id", callerSpanCtx.TraceID().String()),
+				attribute.String("caller.span_id", callerSpanCtx.SpanID().String()),
+			)
 		}
 
 		defer span.End()
