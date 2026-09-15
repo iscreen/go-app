@@ -33,7 +33,8 @@ func (i OtelInterceptor) Handler() grpc.UnaryServerInterceptor {
 			return handler(ctx, req)
 		}
 
-		callerSpanCtx := trace.SpanContextFromContext(ctx)
+		callerSpan := trace.SpanFromContext(ctx)
+		callerSpanCtx := callerSpan.SpanContext()
 
 		startOpts := []trace.SpanStartOption{trace.WithNewRoot()}
 		if callerSpanCtx.IsValid() {
@@ -43,6 +44,12 @@ func (i OtelInterceptor) Handler() grpc.UnaryServerInterceptor {
 		}
 
 		newCtx, span := tracer.Start(ctx, info.FullMethod, startOpts...)
+
+		if callerSpan.IsRecording() && span.SpanContext().IsValid() {
+			callerSpan.AddLink(trace.Link{
+				SpanContext: span.SpanContext(),
+			})
+		}
 
 		defer span.End()
 
