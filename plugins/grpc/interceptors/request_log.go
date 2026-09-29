@@ -114,11 +114,24 @@ func SetWhitelistReqKeysInContext(ctx context.Context, keys []interface{}) {
 	controllerData["whitelist_req_keys"] = keys
 }
 
+func SetLogFieldInContext(ctx context.Context, key string, value interface{}) {
+	cd, ok := ctx.Value("controller_data").(map[string]interface{})
+	if !ok {
+		return
+	}
+	fields, ok := cd["log_fields"].(logrus.Fields)
+	if !ok {
+		return
+	}
+	fields[key] = value
+}
+
 func (i RequestLogInterceptor) Handler() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (_ interface{}, err error) {
 		// initial a ContextKeyControllerData
 		ctx = context.WithValue(ctx, "controller_data", map[string]interface{}{
 			"whitelist_req_keys": []interface{}{},
+			"log_fields":         logrus.Fields{},
 		})
 
 		service := path.Dir(info.FullMethod)[1:]
@@ -142,9 +155,13 @@ func (i RequestLogInterceptor) Handler() grpc.UnaryServerInterceptor {
 		res, err := handler(ctx, req)
 		stop := time.Now()
 
+		var extraFields logrus.Fields
+		if cd, ok := ctx.Value("controller_data").(map[string]interface{}); ok {
+			extraFields, _ = cd["log_fields"].(logrus.Fields)
+		}
 		resLogger := log.WithFields(
 			logrus.Fields{"res_time": stop.Sub(start).String(), "req": redactor.Redact(req)},
-		)
+		).WithFields(extraFields)
 
 		if err != nil || res == nil {
 			resLogger.WithFields(logrus.Fields{"err": err}).Errorf("Request Executed with Error: %+v", err)
