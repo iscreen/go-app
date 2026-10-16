@@ -93,6 +93,40 @@ func main() {
 
 ---
 
+## Response log redaction
+
+Responses are logged unchanged by default. Configure a request log interceptor's
+allowlist before serving requests to redact selected response types:
+
+```go
+// pb is your application's generated protobuf package.
+r := &common.Redactor{}
+r.AddFilters(common.DefaultFilters...)
+r.AddFilters(common.NewFilter(
+    &pb.GetMerchantResponse{},
+    "merchant_rollout_keys",
+    common.FullRedact,
+))
+interceptors.SetRedactor(r)
+
+requestLog.SetResponseRedactAllowlist((*pb.GetMerchantResponse)(nil))
+```
+
+Import `common` from `github.com/shoplineapp/go-app/common` and `interceptors`
+from `github.com/shoplineapp/go-app/plugins/grpc/interceptors`.
+
+The allowlist belongs to each interceptor instance and matches exact Go types:
+`*Response` and `Response` are different entries. Pass multiple examples to allow
+multiple types. Each call replaces the list; calling with no arguments clears it.
+Typed nil pointers are supported; untyped nil entries are ignored.
+
+Only allowlisted response log values use the existing default/custom filters.
+Other response types skip recursive redaction. The response returned to the
+caller is unchanged. Request redaction remains active regardless of this list.
+The redactor configured by `SetRedactor` is shared by request and response logging.
+Configure both before serving requests; concurrent configuration updates are not
+supported.
+
 ## Environment variable
 
 Supporting environment variable configurations

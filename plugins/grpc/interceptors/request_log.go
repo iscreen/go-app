@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path"
+	"reflect"
 	"strings"
 	"time"
 
@@ -34,8 +35,24 @@ func SetRedactor(r *common.Redactor) {
 }
 
 type RequestLogInterceptor struct {
-	logger *logger.Logger
-	env    *env.Env
+	logger                  *logger.Logger
+	env                     *env.Env
+	responseRedactAllowlist map[reflect.Type]struct{}
+}
+
+// SetResponseRedactAllowlist replaces the response types whose log values are
+// processed by the redactor configured through SetRedactor. Types must match
+// exactly, including pointers; typed nil examples such as (*Response)(nil) are
+// supported. Untyped nil entries are ignored, and no arguments clears the list.
+// Configure the allowlist before serving requests; concurrent updates are not supported.
+func (i *RequestLogInterceptor) SetResponseRedactAllowlist(types ...any) {
+	allowlist := make(map[reflect.Type]struct{}, len(types))
+	for _, example := range types {
+		if typ := reflect.TypeOf(example); typ != nil {
+			allowlist[typ] = struct{}{}
+		}
+	}
+	i.responseRedactAllowlist = allowlist
 }
 
 type contextKey string
@@ -115,7 +132,7 @@ func SetWhitelistReqKeysInContext(ctx context.Context, keys []interface{}) {
 	controllerData["whitelist_req_keys"] = keys
 }
 
-func (i RequestLogInterceptor) Handler() grpc.UnaryServerInterceptor {
+func (i *RequestLogInterceptor) Handler() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (_ interface{}, err error) {
 		// initial a ContextKeyControllerData
 		ctx = context.WithValue(ctx, "controller_data", map[string]interface{}{
@@ -155,7 +172,11 @@ func (i RequestLogInterceptor) Handler() grpc.UnaryServerInterceptor {
 		if err != nil || res == nil {
 			resLogger.WithFields(logrus.Fields{"err": err}).Errorf("Request Executed with Error: %+v", err)
 		} else {
-			resLogger.WithFields(logrus.Fields{"res": res}).Info("Request Executed")
+			loggedRes := res
+			if _, ok := i.responseRedactAllowlist[reflect.TypeOf(res)]; ok {
+				loggedRes = redactor.Redact(res)
+			}
+			resLogger.WithFields(logrus.Fields{"res": loggedRes}).Info("Request Executed")
 		}
 
 		return res, err
